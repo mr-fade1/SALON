@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# منع محركات البحث من أرشفة أي مسارات إدارية أو لوحات تحكم
+Disallow: /admin/
+Disallow: /login/
+Disallow: /dashboard/
+
+# مسار خريطة الموقع
+Sitemap: https://mrfade.site/sitemap.xml
