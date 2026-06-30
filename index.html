@@ -643,47 +643,42 @@
                 const userCreds = await signInAnonymously(auth);
                 if (!userCreds.user) return;
 
-                const barbersRef = collection(db, COLLECTION_PATH);
-                onSnapshot(barbersRef, async (snapshot) => {
-                    const egDate = new Date(new Date().toLocaleString("en-US", {timeZone: "Africa/Cairo"}));
-                    const todayStr = egDate.toDateString();
-                    
-                    if (snapshot.empty) {
-                        try {
-                            for (const key of Object.keys(initialData)) {
-                                initialData[key].lastUpdate = todayStr;
-                                await setDoc(doc(db, COLLECTION_PATH, key), initialData[key]);
-                            }
-                        } catch(e) { console.error(e); }
-                    } else {
-                        let needsDailyReset = false;
-                        snapshot.forEach(docSnap => {
-                            const data = docSnap.data();
-                            window.appData[docSnap.id] = data;
-                            if (data.lastUpdate !== todayStr) needsDailyReset = true;
-                        });
-
-                        const currentEgHour = egDate.getHours();
-                        if (needsDailyReset && currentEgHour >= 1) {
-                            try {
-                                await updateDoc(doc(db, COLLECTION_PATH, 'saeed'), { slots: window.appData.saeed.dailyCapacity || 20, lastUpdate: todayStr });
-                                await updateDoc(doc(db, COLLECTION_PATH, 'ahmed'), { slots: window.appData.ahmed.dailyCapacity || 10, lastUpdate: todayStr });
-                                await updateDoc(doc(db, COLLECTION_PATH, 'extra'), { lastUpdate: todayStr });
-                            } catch(e) { console.error("Auto Reset Error", e); }
-                        }
-                    }
-                    
-                    isFirebaseLoaded = true;
-                    window.updateHomeUI();
-                    
-                    const adminDash = document.getElementById('view-admin-dashboard');
-                    if (adminDash && adminDash.classList.contains('view-active')) window.renderAdminDashboard();
-                }, (error) => {
-                    console.error("Firebase Sync Error:", error);
-                    window.showToast("خطأ في المزامنة", "text-red-500");
-                    isFirebaseLoaded = true; window.updateHomeUI();
+              const barbersRef = collection(db, COLLECTION_PATH);
+        onSnapshot(barbersRef, async (snapshot) => {
+            const egDate = new Date(new Date().toLocaleString("en-US", {timeZone: "Africa/Cairo"}));
+            const todayStr = egDate.toDateString();
+            
+            // 🟢 قراءة البيانات فقط من السيرفر بدون إعادة رفع البيانات الافتراضية 🟢
+            if (!snapshot.empty) {
+                let needsDailyReset = false;
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    window.appData[docSnap.id] = data;
+                    if (data.lastUpdate !== todayStr) needsDailyReset = true;
                 });
 
+                const currentEgHour = egDate.getHours();
+                // الريسيت اليومي لعدد الأماكن المتاحة فقط لو فيه داتا فعلاً
+                if (needsDailyReset && currentEgHour >= 1) {
+                    try {
+                        await updateDoc(doc(db, COLLECTION_PATH, 'saeed'), { slots: window.appData.saeed.dailyCapacity || 20, lastUpdate: todayStr });
+                        await updateDoc(doc(db, COLLECTION_PATH, 'ahmed'), { slots: window.appData.ahmed.dailyCapacity || 10, lastUpdate: todayStr });
+                        await updateDoc(doc(db, COLLECTION_PATH, 'extra'), { lastUpdate: todayStr });
+                    } catch(e) { console.error("Auto Reset Error", e); }
+                }
+            }
+            
+            isFirebaseLoaded = true;
+            window.updateHomeUI();
+            
+            const adminDash = document.getElementById('view-admin-dashboard');
+            if (adminDash && adminDash.classList.contains('view-active')) window.renderAdminDashboard();
+        }, (error) => {
+            console.error("Firebase Sync Error:", error);
+            window.showToast("خطأ في المزامنة", "text-red-500");
+            // في حالة وجود خطأ في الاتصال، نعرض الموقع كما هو بدون إعادة البيانات القديمة
+            isFirebaseLoaded = true; window.updateHomeUI();
+        });
             } catch (error) {
                 console.error("Firebase Auth Error:", error);
                 window.showToast("يرجى تفعيل Auth", "text-red-500");
