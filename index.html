@@ -643,29 +643,30 @@
                 const userCreds = await signInAnonymously(auth);
                 if (!userCreds.user) return;
 
-              const barbersRef = collection(db, COLLECTION_PATH);
+             const barbersRef = collection(db, COLLECTION_PATH);
         onSnapshot(barbersRef, async (snapshot) => {
             const egDate = new Date(new Date().toLocaleString("en-US", {timeZone: "Africa/Cairo"}));
             const todayStr = egDate.toDateString();
+            const currentEgHour = egDate.getHours();
             
-            // 🟢 قراءة البيانات فقط من السيرفر بدون إعادة رفع البيانات الافتراضية 🟢
             if (!snapshot.empty) {
-                let needsDailyReset = false;
-                snapshot.forEach(docSnap => {
+                snapshot.forEach(async (docSnap) => {
                     const data = docSnap.data();
                     window.appData[docSnap.id] = data;
-                    if (data.lastUpdate !== todayStr) needsDailyReset = true;
+                    
+                    // 🟢 ريسيت ذكي ومنفصل لكل حلاق لوحده لمنع تضارب الأعداد 🟢
+                    if (data.lastUpdate !== todayStr && currentEgHour >= 1) {
+                        try {
+                            const barberRef = doc(db, COLLECTION_PATH, docSnap.id);
+                            if (docSnap.id === 'extra') {
+                                await updateDoc(barberRef, { lastUpdate: todayStr });
+                            } else {
+                                const capacity = data.dailyCapacity || (docSnap.id === 'saeed' ? 20 : 10);
+                                await updateDoc(barberRef, { slots: capacity, lastUpdate: todayStr });
+                            }
+                        } catch(e) { console.error("Auto Reset Error for " + docSnap.id, e); }
+                    }
                 });
-
-                const currentEgHour = egDate.getHours();
-                // الريسيت اليومي لعدد الأماكن المتاحة فقط لو فيه داتا فعلاً
-                if (needsDailyReset && currentEgHour >= 1) {
-                    try {
-                        await updateDoc(doc(db, COLLECTION_PATH, 'saeed'), { slots: window.appData.saeed.dailyCapacity || 20, lastUpdate: todayStr });
-                        await updateDoc(doc(db, COLLECTION_PATH, 'ahmed'), { slots: window.appData.ahmed.dailyCapacity || 10, lastUpdate: todayStr });
-                        await updateDoc(doc(db, COLLECTION_PATH, 'extra'), { lastUpdate: todayStr });
-                    } catch(e) { console.error("Auto Reset Error", e); }
-                }
             }
             
             isFirebaseLoaded = true;
@@ -676,7 +677,6 @@
         }, (error) => {
             console.error("Firebase Sync Error:", error);
             window.showToast("خطأ في المزامنة", "text-red-500");
-            // في حالة وجود خطأ في الاتصال، نعرض الموقع كما هو بدون إعادة البيانات القديمة
             isFirebaseLoaded = true; window.updateHomeUI();
         });
             } catch (error) {
@@ -1126,9 +1126,13 @@
 
         window.adminUpdateSlots = async function(key, val) {
             const ref = doc(db, COLLECTION_PATH, key);
-            await updateDoc(ref, { slots: parseInt(val) || 0 }); window.showToast('تم تحديث الأماكن', 'text-cyber');
+            const egDate = new Date(new Date().toLocaleString("en-US", {timeZone: "Africa/Cairo"}));
+            const todayStr = egDate.toDateString();
+            
+            // تحديث العدد مع بصمة التاريخ الحالي لمنع الريسيت التلقائي
+            await updateDoc(ref, { slots: parseInt(val) || 0, lastUpdate: todayStr }); 
+            window.showToast('تم تحديث الأماكن', 'text-cyber');
         };
-
         window.adminUpdateDailyCapacity = async function(key, val) {
             const ref = doc(db, COLLECTION_PATH, key);
             await updateDoc(ref, { dailyCapacity: parseInt(val) || 0 }); window.showToast('تم تحديث حصة الأيام الجديدة', 'text-acid');
